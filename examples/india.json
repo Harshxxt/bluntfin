@@ -1,0 +1,43 @@
+{
+  "currency": "₹",
+  "net_monthly_income": 105000,
+  "gross_annual_income": 1500000,
+  "age": 27,
+  "retirement_age": 58,
+  "cash": 150000,
+  "investments": 400000,
+  "monthly_investing": 15000,
+  "monthly_expenses": {
+    "housing": 28000,
+    "groceries": 12000,
+    "utilities": 4000,
+    "transport": 6000,
+    "dining_out": 9000,
+    "shopping": 10000,
+    "family_support": 10000
+  },
+  "debts": [
+    {
+      "name": "Bike loan",
+      "kind": "auto",
+      "balance": 60000,
+      "apr": 11.5,
+      "min_payment": 4500
+    }
+  ],
+  "goals": [
+    {
+      "name": "Car",
+      "target": 800000,
+      "months": 30,
+      "saved": 100000
+    }
+  ],
+  "tax": {
+    "system": "india_new"
+  },
+  "expected_real_return": 5.0,
+  "return_volatility": 15.0,
+  "life_expectancy": 90,
+  "number_grouping": "indian"
+}

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 
 from .model import Debt, Profile
+from .montecarlo import Simulator
 
 MAX_MONTHS = 1200  # 100 years: if payoff takes longer, it never happens
 
@@ -33,7 +34,20 @@ class Finding:
 
 def money(profile: Profile, x: float) -> str:
     sign = "-" if x < 0 else ""
-    return f"{sign}{profile.currency}{abs(x):,.0f}"
+    n = round(abs(x))
+    if profile.number_grouping == "indian" and n >= 1000:
+        s = str(n)
+        head, tail = s[:-3], s[-3:]
+        groups = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            groups.insert(0, head)
+        body = ",".join(groups) + "," + tail
+    else:
+        body = f"{n:,}"
+    return f"{sign}{profile.currency}{body}"
 
 
 def pct(x: float) -> str:
@@ -363,13 +377,24 @@ def required_monthly(pv: float, target: float, annual_rate_pct: float, months: i
     return max((target - pv * g) * r / (g - 1), 0.0)
 
 
-def analyze_retirement(p: Profile) -> list[Finding]:
-    """Target = annual spending / withdrawal rate (4% rule -> 25x spending). Real (inflation-adjusted) dollars."""
+def retirement_withdrawal(p: Profile) -> tuple[float, float, float]:
+    """(net spending, gross withdrawal needed, taxable fraction) per year, today's money."""
+    spending = p.retirement_spending_annual or p.total_expenses * 12
+    if not p.tax:
+        return spending, spending, 0.0
+    frac = p.pretax_fraction if p.pretax_fraction is not None else p.tax.default_pretax_fraction
+    return spending, p.tax.gross_up(spending, frac), frac
+
+
+def analyze_retirement(p: Profile, monte_carlo: bool = True, runs: int = 5000,
+                       seed: int | None = None) -> list[Finding]:
+    """Target = gross withdrawal / withdrawal rate (4% rule -> 25x). Real (inflation-adjusted) money.
+    With monte_carlo, the verdict comes from simulated success probability, not the straight line."""
     if p.age is None:
         return [Finding("retirement", Severity.WEAK, "No age given, so no retirement projection.",
                         "Add 'age' to your profile. Not knowing is not a plan.")]
-    spending = p.retirement_spending_annual or p.total_expenses * 12
-    target = spending / (p.withdrawal_rate / 100)
+    spending, withdrawal, frac = retirement_withdrawal(p)
+    target = withdrawal / (p.withdrawal_rate / 100)
     months = max(p.retirement_age - p.age, 0) * 12
     contrib = p.payroll_savings_monthly + p.monthly_investing
     projected = future_value(p.investments, contrib, p.expected_real_return, months)
@@ -377,34 +402,155 @@ def analyze_retirement(p: Profile) -> list[Finding]:
     ratio = projected / target if target else 1.0
     m = {"target": round(target), "projected": round(projected), "funded_ratio": round(ratio, 2),
          "current_monthly_contribution": contrib, "required_monthly_contribution": round(need, 2),
-         "years_left": months // 12, "assumed_real_return_pct": p.expected_real_return}
+         "years_left": months // 12, "assumed_real_return_pct": p.expected_real_return,
+         "net_spending": round(spending), "gross_withdrawal": round(withdrawal)}
 
     assumptions = (f"Assumes {pct(p.expected_real_return)} real return, {pct(p.withdrawal_rate)} withdrawal, "
                    f"{money(p, spending)}/yr spending in today's money, retirement at {p.retirement_age}.")
+    if p.tax and withdrawal > spending + 1:
+        assumptions += (f" Tax ({p.tax.label}, {frac:.0%} of withdrawals taxable) means you must withdraw "
+                        f"{money(p, withdrawal)}/yr to spend {money(p, spending)}.")
+    out: list[Finding] = []
     if months == 0:
         sev = Severity.GOOD if ratio >= 1 else Severity.CRITICAL if ratio < 0.5 else Severity.BAD
-        return [Finding("retirement", sev, f"At retirement age with {pct(100 * ratio)} of what you need.",
-                        f"Target {money(p, target)}, have {money(p, p.investments)}. {assumptions}", m)]
-
-    head = (f"On track for {money(p, projected)} by {p.retirement_age}; you need {money(p, target)} "
-            f"({pct(100 * ratio)} funded).")
-    gap = need - contrib
-    if ratio >= 1:
-        return [Finding("retirement", Severity.GOOD, head, f"You are on track. {assumptions}", m)]
-    detail = (f"You invest {money(p, contrib)}/mo; you need {money(p, need)}/mo, a gap of {money(p, gap)}/mo. "
-              f"{assumptions}")
-    if ratio < 0.25:
-        detail = "You are not going to retire on this trajectory. " + detail
-        sev = Severity.CRITICAL
-    elif ratio < 0.5:
-        sev = Severity.BAD
-    elif ratio < 0.75:
-        sev = Severity.WEAK
+        out.append(Finding("retirement", sev, f"At retirement age with {pct(100 * ratio)} of what you need.",
+                           f"Target {money(p, target)}, have {money(p, p.investments)}. {assumptions}", m))
     else:
+        head = (f"Straight-line: {money(p, projected)} by {p.retirement_age}; you need {money(p, target)} "
+                f"({pct(100 * ratio)} funded).")
+        gap = need - contrib
+        if ratio >= 1:
+            sev, detail = Severity.GOOD, f"On track if markets were smooth. {assumptions}"
+        else:
+            detail = (f"You invest {money(p, contrib)}/mo; you need {money(p, need)}/mo, a gap of "
+                      f"{money(p, gap)}/mo. {assumptions}")
+            if ratio < 0.25:
+                detail = "You are not going to retire on this trajectory. " + detail
+                sev = Severity.CRITICAL
+            elif ratio < 0.5:
+                sev = Severity.BAD
+            elif ratio < 0.75:
+                sev = Severity.WEAK
+            else:
+                sev = Severity.OK
+            if gap > max(p.surplus - p.monthly_investing, 0):
+                detail += (" The gap is bigger than your free cash flow, so this requires earning more or "
+                           "spending less, not just 'trying harder'.")
+        out.append(Finding("retirement", sev, head, detail, m))
+
+    if monte_carlo and p.age < p.life_expectancy:
+        out.append(_monte_carlo_finding(p, withdrawal, contrib, runs, seed))
+        # The simulation carries the verdict; the straight line is context only.
+        if out[0].severity < Severity.OK:
+            out[0].severity = Severity.OK
+            out[0].headline += " (see simulation below for the real verdict)"
+    return out
+
+
+def _monte_carlo_finding(p: Profile, withdrawal: float, contrib_monthly: float,
+                         runs: int, seed: int | None) -> Finding:
+    ret_age = max(p.retirement_age, p.age)
+    sim = Simulator(ret_age - p.age, p.life_expectancy - ret_age, p.expected_real_return,
+                    p.return_volatility, runs, seed)
+    r = sim.run(p.investments, contrib_monthly * 12, withdrawal, ret_age)
+    need90 = sim.contribution_for(0.90, p.investments, withdrawal, ret_age)
+    sr = 100 * r.success_rate
+    m = {"runs": r.runs, "success_rate_pct": round(sr, 1),
+         "balance_at_retirement": {k: round(v) for k, v in r.at_retirement.items()},
+         "balance_at_end": {k: round(v) for k, v in r.at_end.items()},
+         "median_depletion_age": r.median_depletion_age, "p10_depletion_age": r.p10_depletion_age,
+         "monthly_contribution_for_90pct": None if need90 is None else round(need90 / 12, 2),
+         "return_mean_pct": p.expected_real_return, "return_stdev_pct": p.return_volatility,
+         "plan_to_age": p.life_expectancy}
+
+    sr_txt = f"{sr:.1f}" if 99 < sr < 100 or 0 < sr < 1 else f"{sr:.0f}"
+    fail_txt = f"{100 - sr:.1f}" if 0 < 100 - sr < 1 or 99 < 100 - sr < 100 else f"{100 - sr:.0f}"
+    head = f"Monte Carlo: you make it to {p.life_expectancy} in {sr_txt}% of {r.runs:,} simulated markets."
+    parts = []
+    if r.success_rate < 1 and r.median_depletion_age is not None:
+        parts.append(f"In the {fail_txt}% that fail, the money typically runs out at age "
+                     f"{r.median_depletion_age:.0f}" + (f"; in the worst 10% of markets, by {r.p10_depletion_age:.0f}"
+                                                         if r.p10_depletion_age is not None else "") + ".")
+    if p.retirement_age > p.age:
+        a = r.at_retirement
+        parts.append(f"Portfolio at {p.retirement_age}: bad luck (10th pct) {money(p, a['p10'])}, "
+                     f"median {money(p, a['p50'])}, good luck (90th pct) {money(p, a['p90'])}.")
+    if r.success_rate < 0.9:
+        if need90 is None:
+            parts.append("No realistic contribution gets you to 90% with this retirement age and spending. "
+                         "Retire later or plan to spend less.")
+        elif p.retirement_age > p.age:
+            parts.append(f"For a 90% success rate you need to invest {money(p, need90 / 12)}/mo; "
+                         f"you invest {money(p, contrib_monthly)}/mo.")
+    parts.append(f"Returns: {pct(p.expected_real_return)} mean, {pct(p.return_volatility)} volatility, real. "
+                 "A plan below ~80% is a coin flip with your old age.")
+
+    if sr >= 90:
+        sev = Severity.GOOD
+    elif sr >= 75:
         sev = Severity.OK
-    if gap > max(p.surplus - p.monthly_investing, 0):
-        detail += " The gap is bigger than your free cash flow, so this requires earning more or spending less, not just 'trying harder'."
-    return [Finding("retirement", sev, head, detail, m)]
+    elif sr >= 50:
+        sev = Severity.WEAK
+    elif sr >= 25:
+        sev = Severity.BAD
+    else:
+        sev = Severity.CRITICAL
+    return Finding("retirement", sev, head, " ".join(parts), m)
+
+
+# ---------------------------------------------------------------------- tax
+
+def analyze_tax(p: Profile) -> list[Finding]:
+    """Effective and marginal rates, take-home consistency, pre-tax contribution value."""
+    if not p.tax:
+        return [Finding("tax", Severity.OK, "No tax system set, so no tax analysis.",
+                        "Add \"tax\": {\"system\": \"us\" | \"uk\" | \"india_new\" | \"custom\"}. "
+                        "Tax is usually your single largest expense; ignoring it is a choice.")]
+    gross = p.gross_annual_income or 0.0
+    pretax = p.payroll_savings_monthly * 12
+    t = p.tax.compute(gross, pretax)
+    marginal = p.tax.marginal_pct(gross, pretax)
+    implied_net = gross - t.total - pretax
+    stated_net = p.net_monthly_income * 12
+    m = {"system": p.tax.label, "income_tax": round(t.income_tax), "payroll_tax": round(t.payroll_tax),
+         "total_tax": round(t.total), "effective_pct": round(t.effective_pct, 2),
+         "marginal_pct": round(marginal, 2), "implied_net_annual": round(implied_net),
+         "stated_net_annual": round(stated_net)}
+    out = [Finding("tax", Severity.OK,
+                   f"You pay {money(p, t.total)}/yr in tax: {pct(t.effective_pct)} effective, "
+                   f"{pct(marginal)} on your next {p.currency}1.",
+                   f"{p.tax.label}. Income tax {money(p, t.income_tax)}"
+                   + (f", payroll tax {money(p, t.payroll_tax)}" if t.payroll_tax else "") + ". "
+                   "Estimate for wage income only; no credits, capital gains or itemized deductions.", m)]
+
+    if marginal >= 50:
+        out.append(Finding("tax", Severity.WEAK, f"Your marginal rate is {pct(marginal)}. You are in a tax trap.",
+                           "A cliff or allowance taper means you keep less than half of your next raise. "
+                           "Pre-tax pension/retirement contributions or salary sacrifice that pull you below the "
+                           "threshold are worth more here than anywhere else in your income range.", m))
+
+    diff = stated_net - implied_net
+    if gross > 0 and abs(diff) > 0.10 * implied_net:
+        if diff < 0:
+            detail = (f"Your gross minus estimated tax should leave about {money(p, implied_net / 12)}/mo, "
+                      f"but you report {money(p, p.net_monthly_income)}/mo. {money(p, -diff / 12)}/mo is "
+                      "unaccounted for: provident fund/pension deductions not entered as payroll_savings_monthly, "
+                      "health insurance, other payroll deductions, or a number you got wrong. "
+                      "Find out which.")
+        else:
+            detail = (f"You report {money(p, diff / 12)}/mo more take-home than your gross allows "
+                      f"(estimate {money(p, implied_net / 12)}/mo). One of the two numbers is wrong, "
+                      "or you have income this model does not know about.")
+        out.append(Finding("tax", Severity.WEAK, "Your take-home pay does not match your gross pay.", detail, m))
+
+    if p.tax.pretax_deductible and marginal > 0:
+        per_k = marginal * 10  # tax saved per 1,000 contributed
+        if pretax == 0:
+            out.append(Finding("tax", Severity.WEAK, "You contribute nothing pre-tax.",
+                               f"At your marginal rate, every {money(p, 1000)} into a pre-tax retirement account "
+                               f"costs you only about {money(p, 1000 - per_k)} of take-home. You are "
+                               "choosing to pay that tax. Start with whatever gets the full employer match.", m))
+    return out
 
 
 # -------------------------------------------------------------------- goals
@@ -447,10 +593,12 @@ SECTIONS = {
     "networth": analyze_networth,
     "retirement": analyze_retirement,
     "goals": analyze_goals,
+    "tax": analyze_tax,
 }
 
 
-def run(p: Profile, sections: list[str] | None = None, extra_debt_payment: float | None = None) -> list[Finding]:
+def run(p: Profile, sections: list[str] | None = None, extra_debt_payment: float | None = None,
+        monte_carlo: bool = True, runs: int = 5000, seed: int | None = None) -> list[Finding]:
     chosen = sections or list(SECTIONS)
     unknown = [s for s in chosen if s not in SECTIONS]
     if unknown:
@@ -459,6 +607,8 @@ def run(p: Profile, sections: list[str] | None = None, extra_debt_payment: float
     for name in chosen:
         if name == "debt":
             findings += analyze_debt(p, extra_debt_payment)
+        elif name == "retirement":
+            findings += analyze_retirement(p, monte_carlo, runs, seed)
         else:
             findings += SECTIONS[name](p)
     return findings
@@ -466,6 +616,6 @@ def run(p: Profile, sections: list[str] | None = None, extra_debt_payment: float
 
 def priorities(findings: list[Finding]) -> list[Finding]:
     """What to fix first: CRITICAL then BAD, in a sensible order."""
-    order = ["cashflow", "emergency", "debt", "retirement", "goals", "networth"]
+    order = ["cashflow", "emergency", "debt", "tax", "retirement", "goals", "networth"]
     bad = [f for f in findings if f.severity <= Severity.BAD]
     return sorted(bad, key=lambda f: (f.severity, order.index(f.section)))

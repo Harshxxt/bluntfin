@@ -16,11 +16,39 @@
     "shopping": 300
   },
   "debts": [
-    {"name": "Visa", "kind": "credit_card", "balance": 9400, "apr": 27.9, "min_payment": 190},
-    {"name": "Store card", "kind": "credit_card", "balance": 1800, "apr": 31.0, "min_payment": 45},
-    {"name": "Car loan", "kind": "auto", "balance": 14000, "apr": 8.5, "min_payment": 390}
+    {
+      "name": "Visa",
+      "kind": "credit_card",
+      "balance": 9400,
+      "apr": 27.9,
+      "min_payment": 190
+    },
+    {
+      "name": "Store card",
+      "kind": "credit_card",
+      "balance": 1800,
+      "apr": 31.0,
+      "min_payment": 45
+    },
+    {
+      "name": "Car loan",
+      "kind": "auto",
+      "balance": 14000,
+      "apr": 8.5,
+      "min_payment": 390
+    }
   ],
   "goals": [
-    {"name": "House deposit", "target": 30000, "months": 24, "saved": 0}
-  ]
+    {
+      "name": "House deposit",
+      "target": 30000,
+      "months": 24,
+      "saved": 0
+    }
+  ],
+  "tax": {
+    "system": "us",
+    "filing": "single",
+    "state_tax_pct": 4
+  }
 }

@@ -9,6 +9,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .tax import TaxConfigError, TaxSystem, tax_system_from_config
+
 
 class ProfileError(ValueError):
     """Raised when a profile is missing data or contains impossible values."""
@@ -61,6 +63,11 @@ class Profile:
     expected_real_return: float = 5.0     # percent, after inflation
     withdrawal_rate: float = 4.0          # percent
     currency: str = "$"
+    tax: TaxSystem | None = None
+    pretax_fraction: float | None = None   # share of retirement withdrawals taxed as income (0-1)
+    return_volatility: float = 12.0       # annual stdev of real returns, percent
+    life_expectancy: int = 95             # plan until this age
+    number_grouping: str = "western"      # "western" 1,234,567 or "indian" 12,34,567
 
     # ---- derived values -------------------------------------------------
     @property
@@ -171,6 +178,22 @@ def profile_from_dict(data: dict) -> Profile:
         withdrawal_rate=_num(data, "withdrawal_rate", 4.0, minimum=0.5, maximum=15),
         currency=str(data.get("currency", "$")),
     )
+
+    try:
+        profile.tax = tax_system_from_config(data.get("tax"))
+    except TaxConfigError as exc:
+        raise ProfileError(str(exc)) from None
+    grouping = data.get("number_grouping", "western")
+    if grouping not in ("western", "indian"):
+        raise ProfileError("number_grouping must be 'western' or 'indian'.")
+    profile.number_grouping = grouping
+    profile.pretax_fraction = _num(data, "pretax_fraction", None, maximum=1)
+    profile.return_volatility = _num(data, "return_volatility", 12.0, maximum=40)
+    profile.life_expectancy = int(_num(data, "life_expectancy", 95, minimum=50, maximum=120))
+    if profile.life_expectancy <= profile.retirement_age:
+        raise ProfileError("life_expectancy must be above retirement_age.")
+    if profile.tax and profile.gross_annual_income is None:
+        raise ProfileError("A 'tax' system needs 'gross_annual_income' to compute anything.")
 
     if profile.gross_monthly_income is not None and profile.gross_monthly_income < profile.net_monthly_income:
         raise ProfileError("Net monthly income is higher than gross monthly income. That is impossible; "

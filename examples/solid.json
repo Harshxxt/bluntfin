@@ -18,9 +18,25 @@
     "other": 400
   },
   "debts": [
-    {"name": "Mortgage", "kind": "mortgage", "balance": 280000, "apr": 3.4, "min_payment": 1850}
+    {
+      "name": "Mortgage",
+      "kind": "mortgage",
+      "balance": 280000,
+      "apr": 3.4,
+      "min_payment": 1850
+    }
   ],
   "goals": [
-    {"name": "New car", "target": 25000, "months": 18, "saved": 8000}
-  ]
+    {
+      "name": "New car",
+      "target": 25000,
+      "months": 18,
+      "saved": 8000
+    }
+  ],
+  "tax": {
+    "system": "us",
+    "filing": "married",
+    "state_tax_pct": 5
+  }
 }

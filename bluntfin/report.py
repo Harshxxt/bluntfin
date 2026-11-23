@@ -13,6 +13,7 @@ TITLES = {
     "networth": "NET WORTH",
     "retirement": "RETIREMENT",
     "goals": "GOALS",
+    "tax": "TAX",
 }
 COLORS = {
     Severity.CRITICAL: "\033[1;97;41m",

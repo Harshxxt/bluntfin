@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bluntfin"
+version = "0.1.0"
+description = "A personal financial model that tells you the truth about your money. No sugar-coating."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = []
+
+[project.scripts]
+bluntfin = "bluntfin.cli:main"
+
+[tool.setuptools]
+packages = ["bluntfin"]

@@ -1,0 +1,26 @@
+{
+  "currency": "$",
+  "net_monthly_income": 3800,
+  "gross_annual_income": 58000,
+  "age": 31,
+  "cash": 900,
+  "investments": 2500,
+  "monthly_investing": 200,
+  "monthly_expenses": {
+    "housing": 1650,
+    "utilities": 180,
+    "groceries": 450,
+    "dining_out": 420,
+    "transport": 380,
+    "subscriptions": 95,
+    "shopping": 300
+  },
+  "debts": [
+    {"name": "Visa", "kind": "credit_card", "balance": 9400, "apr": 27.9, "min_payment": 190},
+    {"name": "Store card", "kind": "credit_card", "balance": 1800, "apr": 31.0, "min_payment": 45},
+    {"name": "Car loan", "kind": "auto", "balance": 14000, "apr": 8.5, "min_payment": 390}
+  ],
+  "goals": [
+    {"name": "House deposit", "target": 30000, "months": 24, "saved": 0}
+  ]
+}

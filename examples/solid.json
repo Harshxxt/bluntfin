@@ -1,0 +1,26 @@
+{
+  "currency": "$",
+  "net_monthly_income": 7200,
+  "gross_annual_income": 120000,
+  "age": 38,
+  "retirement_age": 60,
+  "cash": 32000,
+  "investments": 310000,
+  "other_assets": 420000,
+  "payroll_savings_monthly": 1500,
+  "monthly_investing": 1200,
+  "monthly_expenses": {
+    "groceries": 700,
+    "utilities": 250,
+    "transport": 300,
+    "insurance": 350,
+    "dining_out": 250,
+    "other": 400
+  },
+  "debts": [
+    {"name": "Mortgage", "kind": "mortgage", "balance": 280000, "apr": 3.4, "min_payment": 1850}
+  ],
+  "goals": [
+    {"name": "New car", "target": 25000, "months": 18, "saved": 8000}
+  ]
+}

@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bluntfin</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #17171a; --muted: #5f5f69; --line: #dedbd4;
+  --accent: #17171a; --accent-ink: #ffffff; --field: #ffffff;
+  --crit-bg: #b3261e; --crit-ink: #fff; --bad: #b3261e; --weak: #8a5a00; --ok: #2f5f8a; --good: #2e6b3a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111113; --panel: #1b1b1f; --ink: #ececef; --muted: #a0a0aa; --line: #2e2e35;
+    --accent: #ececef; --accent-ink: #111113; --field: #141417;
+    --crit-bg: #e5534b; --crit-ink: #111; --bad: #ff7b72; --weak: #e3b341; --ok: #79b8ff; --good: #56d364;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+header h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
+header p { margin: 4px 0 0; color: var(--muted); }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 24px; margin-top: 24px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.panel + .panel { margin-top: 16px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--field); color: var(--ink); font: inherit; min-width: 0; }
+input:focus, select:focus { outline: 2px solid var(--ok); outline-offset: 1px; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.note { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.list-row { display: grid; gap: 8px; margin-bottom: 8px; align-items: end; }
+.exp-row { grid-template-columns: 1fr 1fr 32px; }
+.debt-row, .goal-row { grid-template-columns: 1fr 1fr 1fr 32px; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.debt-row .x, .goal-row .x { grid-column: 4; grid-row: 1; }
+.br-row { grid-template-columns: 1fr 1fr 32px; }
+@media (max-width: 600px) { .debt-row, .goal-row { grid-template-columns: 1fr 1fr 32px; } .debt-row .x, .goal-row .x { grid-column: 3; } }
+.x { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; height: 38px; cursor: pointer; }
+.add { border: 1px dashed var(--line); background: transparent; color: var(--ink); padding: 6px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.primary { background: var(--accent); color: var(--accent-ink); border: 0; padding: 11px 20px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); padding: 11px 16px; border-radius: 8px; font: inherit; cursor: pointer; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.hidden { display: none !important; }
+#results { position: sticky; top: 16px; }
+.empty { color: var(--muted); }
+.error { border-left: 4px solid var(--bad); padding: 10px 12px; background: var(--panel); color: var(--bad); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tile .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.prio { border: 2px solid var(--ink); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+.prio h3 { margin: 0 0 8px; font-size: 15px; }
+.prio ol { margin: 0; padding-left: 20px; }
+.prio li { margin: 4px 0; }
+.sec h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 20px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.f { display: grid; grid-template-columns: 86px 1fr; gap: 10px; padding: 8px 0; }
+.f .h { font-weight: 600; }
+.f .d { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.badge { font-size: 11px; font-weight: 700; letter-spacing: .05em; padding: 3px 0; border-radius: 4px; text-align: center; height: fit-content; border: 1px solid currentColor; }
+.CRITICAL { background: var(--crit-bg); color: var(--crit-ink); border-color: var(--crit-bg); }
+.BAD { color: var(--bad); } .WEAK { color: var(--weak); } .OK { color: var(--ok); } .GOOD { color: var(--good); }
+footer { margin-top: 20px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>bluntfin</h1>
+    <p>Enter your real numbers. You get the truth, not encouragement. Nothing is stored; this runs on your machine.</p>
+  </header>
+
+  <div class="grid">
+    <form id="form" autocomplete="off" novalidate>
+      <section class="panel">
+        <h2>1. Country</h2>
+        <div class="row">
+          <div><label for="country">Where do you pay tax?</label><select id="country"></select></div>
+          <div class="opt-currency hidden"><label for="currency">Currency symbol</label><input id="currency" maxlength="4" placeholder="e.g. €"></div>
+          <div class="opt-filing hidden"><label for="filing">Filing status</label>
+            <select id="filing"><option value="single">Single</option><option value="married">Married filing jointly</option></select></div>
+          <div class="opt-state hidden"><label for="state">State + local income tax %</label><input id="state" type="number" min="0" max="20" step="0.1" value="0"></div>
+        </div>
+        <p class="note" id="tax-label"></p>
+        <div class="opt-brackets hidden">
+          <label>Your tax brackets (on income after deduction). Leave "up to" empty on the last row for the top rate.</label>
+          <div id="brackets"></div>
+          <button type="button" class="add" data-add="bracket">+ bracket</button>
+          <div class="row" style="margin-top:12px">
+            <div><label for="deduction">Tax-free allowance / standard deduction (annual)</label><input id="deduction" type="number" min="0" value="0"></div>
+            <div><label for="payroll_pct">Social security / payroll tax % of gross</label><input id="payroll_pct" type="number" min="0" max="50" step="0.1" value="0"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>2. Income and age</h2>
+        <div class="row">
+          <div><label for="net">Take-home pay per month <span class="cur"></span></label><input id="net" type="number" min="0" required></div>
+          <div><label for="gross">Gross pay per year (before tax) <span class="cur"></span></label><input id="gross" type="number" min="0"></div>
+        </div>
+        <div class="row">
+          <div><label for="age">Age</label><input id="age" type="number" min="14" max="110"></div>
+          <div><label for="ret_age">Retirement age</label><input id="ret_age" type="number" min="30" max="100"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>3. Monthly living expenses</h2>
+        <p class="note">Do not include loan or card payments here; they go under Debts. Housing here means rent (a mortgage goes under Debts).</p>
+        <div id="expenses"></div>
+        <button type="button" class="add" data-add="expense">+ category</button>
+      </section>
+
+      <section class="panel">
+        <h2>4. Assets and saving</h2>
+        <div class="row">
+          <div><label for="cash">Cash in bank <span class="cur"></span></label><input id="cash" type="number" min="0" value="0"></div>
+          <div><label for="investments">Investments + retirement accounts <span class="cur"></span></label><input id="investments" type="number" min="0" value="0"></div>
+          <div><label for="other_assets">Home, car etc. at market value <span class="cur"></span></label><input id="other_assets" type="number" min="0" value="0"></div>
+        </div>
+        <div class="row">
+          <div><label for="pretax" id="pretax-label">Retirement contributions from salary (monthly)</label><input id="pretax" type="number" min="0" value="0"></div>
+          <div><label for="investing">You invest from take-home (monthly) <span class="cur"></span></label><input id="investing" type="number" min="0" value="0"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>5. Debts</h2>
+        <div id="debts"></div>
+        <button type="button" class="add" data-add="debt">+ debt</button>
+      </section>
+
+      <section class="panel">
+        <h2>6. Goals</h2>
+        <div id="goals"></div>
+        <button type="button" class="add" data-add="goal">+ goal</button>
+      </section>
+
+      <section class="panel">
+        <details>
+          <summary>Assumptions (defaults are reasonable; change only if you know why)</summary>
+          <div class="row">
+            <div><label for="ret_return">Real return % / yr</label><input id="ret_return" type="number" step="0.1" value="5"></div>
+            <div><label for="vol">Volatility % / yr</label><input id="vol" type="number" step="0.5" value="12"></div>
+            <div><label for="wr">Withdrawal rate %</label><input id="wr" type="number" step="0.1" value="4"></div>
+          </div>
+          <div class="row">
+            <div><label for="life">Plan until age</label><input id="life" type="number"></div>
+            <div><label for="ret_spend">Retirement spending / yr (blank = current)</label><input id="ret_spend" type="number" min="0"></div>
+            <div><label for="pretax_frac">Share of withdrawals taxed (0-1, blank = country default)</label><input id="pretax_frac" type="number" min="0" max="1" step="0.05"></div>
+          </div>
+          <div class="row">
+            <div><label for="extra">Extra monthly debt payment (blank = your surplus)</label><input id="extra" type="number" min="0"></div>
+            <div><label for="runs">Monte Carlo runs</label><input id="runs" type="number" min="100" max="20000" value="5000"></div>
+            <div><label for="seed">Random seed (blank = random)</label><input id="seed" type="number"></div>
+          </div>
+        </details>
+        <div class="actions">
+          <button type="submit" class="primary">Tell me the truth</button>
+          <button type="button" class="secondary" id="example">Load an example</button>
+        </div>
+      </section>
+    </form>
+
+    <div id="results" class="panel" aria-live="polite">
+      <p class="empty">Your report appears here. Fill in at least take-home pay and expenses.</p>
+    </div>
+  </div>
+  <footer>Rules of thumb, not licensed financial advice. Tax is an estimate for wage income only. The math is exact; the inputs are yours.</footer>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  let countries = {};
+  const DEBT_KINDS = [["credit_card","Credit card"],["personal","Personal loan"],["auto","Car loan"],["student","Student loan"],["mortgage","Mortgage"],["medical","Medical"],["other","Other"]];
+  const DEFAULT_EXPENSES = ["housing","utilities","groceries","transport","insurance","dining_out","subscriptions","shopping"];
+
+  const el = (tag, attrs = {}, kids = []) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "text") e.textContent = v; else if (k === "class") e.className = v; else e.setAttribute(k, v);
+    }
+    kids.forEach((c) => e.append(c));
+    return e;
+  };
+  const field = (label, attrs) => el("div", {}, [el("label", { text: label }), el("input", attrs)]);
+  const removeBtn = () => { const b = el("button", { type: "button", class: "x", "aria-label": "Remove", text: "×" }); b.onclick = () => b.parentElement.remove(); return b; };
+
+  function addExpense(name = "", amount = "") {
+    $("#expenses").append(el("div", { class: "list-row exp-row" }, [
+      field("Category", { value: name, "data-k": "name" }),
+      field("Monthly", { type: "number", min: "0", value: amount, "data-k": "amount" }),
+      removeBtn()]));
+  }
+  function addDebt(d = {}) {
+    const sel = el("select", { "data-k": "kind" });
+    DEBT_KINDS.forEach(([v, t]) => sel.append(el("option", { value: v, text: t })));
+    sel.value = d.kind || "credit_card";
+    $("#debts").append(el("div", { class: "list-row debt-row" }, [
+      field("Name", { value: d.name || "", "data-k": "name" }),
+      el("div", {}, [el("label", { text: "Kind" }), sel]),
+      field("Balance", { type: "number", min: "0", value: d.balance ?? "", "data-k": "balance" }),
+      field("APR %", { type: "number", min: "0", step: "0.1", value: d.apr ?? "", "data-k": "apr" }),
+      field("Min / month", { type: "number", min: "0", value: d.min_payment ?? "", "data-k": "min_payment" }),
+      removeBtn()]));
+  }
+  function addGoal(g = {}) {
+    $("#goals").append(el("div", { class: "list-row goal-row" }, [
+      field("Goal", { value: g.name || "", "data-k": "name" }),
+      field("Target", { type: "number", min: "0", value: g.target ?? "", "data-k": "target" }),
+      field("Months", { type: "number", min: "1", value: g.months ?? "", "data-k": "months" }),
+      field("Saved", { type: "number", min: "0", value: g.saved ?? "", "data-k": "saved" }),
+      removeBtn()]));
+  }
+  function addBracket(upTo = "", rate = "") {
+    $("#brackets").append(el("div", { class: "list-row br-row" }, [
+      field("Up to", { type: "number", min: "0", value: upTo, "data-k": "upto" }),
+      field("Rate %", { type: "number", min: "0", max: "100", step: "0.1", value: rate, "data-k": "rate" }),
+      removeBtn()]));
+  }
+  document.querySelectorAll("[data-add]").forEach((b) => b.onclick = () =>
+    ({ expense: addExpense, debt: addDebt, goal: addGoal, bracket: addBracket })[b.dataset.add]());
+
+  function onCountry() {
+    const code = $("#country").value, c = countries[code];
+    if (!c) return;
+    const show = (cls, on) => document.querySelectorAll(cls).forEach((n) => n.classList.toggle("hidden", !on));
+    show(".opt-filing", c.options.includes("filing"));
+    show(".opt-state", c.options.includes("state_tax_pct"));
+    show(".opt-currency", c.options.includes("currency"));
+    show(".opt-brackets", c.options.includes("custom_brackets"));
+    $("#tax-label").textContent = "Tax: " + c.tax_label;
+    $("#pretax-label").textContent = c.pretax_label + " (monthly)";
+    $("#ret_age").placeholder = c.retirement_age;
+    $("#life").placeholder = c.life_expectancy;
+    if (code === "OTHER" && !$("#brackets").children.length) { addBracket("", "0"); }
+    updateCur();
+    try { localStorage.setItem("bluntfin.country", code); } catch (e) {}
+  }
+  function curSymbol() { const c = countries[$("#country").value]; return c && c.currency ? c.currency : ($("#currency").value || ""); }
+  function updateCur() { const s = curSymbol(); document.querySelectorAll(".cur").forEach((n) => n.textContent = s ? `(${s})` : ""); }
+  $("#country").onchange = onCountry;
+  $("#currency").oninput = updateCur;
+
+  const num = (id) => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
+  const rows = (id) => [...document.querySelectorAll(id + " .list-row")].map((r) => {
+    const o = {}; r.querySelectorAll("[data-k]").forEach((i) => o[i.dataset.k] = i.value.trim()); return o; });
+
+  function buildPayload() {
+    const code = $("#country").value;
+    const p = { country: code, net_monthly_income: num("#net"), monthly_expenses: {} };
+    const put = (k, id) => { const v = num(id); if (v !== null) p[k] = v; };
+    put("gross_annual_income", "#gross"); put("age", "#age"); put("retirement_age", "#ret_age");
+    put("cash", "#cash"); put("investments", "#investments"); put("other_assets", "#other_assets");
+    put("payroll_savings_monthly", "#pretax"); put("monthly_investing", "#investing");
+    put("expected_real_return", "#ret_return"); put("return_volatility", "#vol"); put("withdrawal_rate", "#wr");
+    put("life_expectancy", "#life"); put("retirement_spending_annual", "#ret_spend"); put("pretax_fraction", "#pretax_frac");
+    rows("#expenses").forEach((r) => { if (r.name && r.amount !== "") p.monthly_expenses[r.name] = Number(r.amount); });
+    p.debts = rows("#debts").filter((d) => d.balance !== "").map((d) => ({
+      name: d.name || d.kind, kind: d.kind, balance: Number(d.balance), apr: Number(d.apr || 0), min_payment: Number(d.min_payment || 0) }));
+    p.goals = rows("#goals").filter((g) => g.target !== "" && g.months !== "").map((g) => ({
+      name: g.name || "goal", target: Number(g.target), months: Number(g.months), saved: Number(g.saved || 0) }));
+    if (code === "US") p.tax = { system: "us", filing: $("#filing").value, state_tax_pct: num("#state") || 0 };
+    if (code === "OTHER") {
+      p.currency = $("#currency").value.trim();
+      const br = rows("#brackets").filter((b) => b.rate !== "");
+      if (br.length && p.gross_annual_income != null) {
+        const list = br.map((b) => [b.upto === "" ? null : Number(b.upto), Number(b.rate)]);
+        list.sort((a, b) => (a[0] ?? Infinity) - (b[0] ?? Infinity));
+        p.tax = { system: "custom", brackets: list, deduction: num("#deduction") || 0, payroll_pct: num("#payroll_pct") || 0 };
+      }
+    }
+    p._options = { runs: num("#runs") || 5000, seed: num("#seed"), extra: num("#extra") };
+    return p;
+  }
+
+  const TITLES = { cashflow: "Cash flow", emergency: "Emergency fund", debt: "Debt", tax: "Tax",
+                   networth: "Net worth", retirement: "Retirement", goals: "Goals" };
+
+  function tile(k, v) { return el("div", { class: "tile" }, [el("div", { class: "v", text: v }), el("div", { class: "k", text: k })]); }
+
+  function render(res) {
+    const out = $("#results"); out.replaceChildren();
+    const m = (sec, key) => { for (const f of res.findings) if (f.section === sec && f.metrics && key in f.metrics) return f.metrics[key]; return null; };
+    const tiles = el("div", { class: "tiles" });
+    const sr = m("cashflow", "savings_rate_pct"); if (sr !== null) tiles.append(tile("savings rate", sr.toFixed(1) + "%"));
+    const ef = m("emergency", "months_covered"); if (ef !== null) tiles.append(tile("months of cash", ef.toFixed(1)));
+    const tx = m("tax", "effective_pct"); if (tx !== null) tiles.append(tile("effective tax", tx.toFixed(1) + "%"));
+    const mc = m("retirement", "success_rate_pct"); if (mc !== null) tiles.append(tile("retirement success", mc.toFixed(0) + "%"));
+    if (tiles.children.length) out.append(tiles);
+
+    const prio = el("div", { class: "prio" }, [el("h3", { text: "Fix this, in this order" })]);
+    if (res.priorities.length) { const ol = el("ol"); res.priorities.forEach((p) => ol.append(el("li", { text: p }))); prio.append(ol); }
+    else prio.append(el("p", { text: "Nothing critical. Do not get comfortable; rerun this every quarter.", style: "margin:0" }));
+    out.append(prio);
+
+    let current = null, box = null;
+    for (const f of res.findings) {
+      if (f.section !== current) { current = f.section; box = el("div", { class: "sec" }, [el("h3", { text: TITLES[current] || current })]); out.append(box); }
+      box.append(el("div", { class: "f" }, [
+        el("span", { class: "badge " + f.severity, text: f.severity }),
+        el("div", {}, [el("div", { class: "h", text: f.headline }), ...(f.detail ? [el("div", { class: "d", text: f.detail })] : [])])]));
+    }
+    if (window.innerWidth < 900) out.scrollIntoView({ behavior: "smooth" });
+  }
+
+  $("#form").onsubmit = async (e) => {
+    e.preventDefault();
+    const out = $("#results");
+    out.replaceChildren(el("p", { class: "empty", text: "Running the numbers…" }));
+    try {
+      const r = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildPayload()) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Request failed");
+      render(data);
+    } catch (err) {
+      out.replaceChildren(el("div", { class: "error", text: err.message }));
+    }
+  };
+
+  const EXAMPLES = {
+    US: { net: 3800, gross: 58000, age: 31, cash: 900, investments: 2500, investing: 200,
+      exp: { housing: 1650, utilities: 180, groceries: 450, dining_out: 420, transport: 380, subscriptions: 95, shopping: 300 },
+      debts: [{ name: "Visa", kind: "credit_card", balance: 9400, apr: 27.9, min_payment: 190 }, { name: "Car loan", kind: "auto", balance: 14000, apr: 8.5, min_payment: 390 }],
+      goals: [{ name: "House deposit", target: 30000, months: 24, saved: 0 }] },
+    GB: { net: 2900, gross: 45000, age: 34, cash: 3000, investments: 18000, pretax: 190, investing: 100,
+      exp: { housing: 1250, utilities: 220, groceries: 350, transport: 180, dining_out: 250, subscriptions: 60 },
+      debts: [{ name: "Credit card", kind: "credit_card", balance: 4200, apr: 24.9, min_payment: 110 }],
+      goals: [{ name: "Wedding", target: 18000, months: 18, saved: 2000 }] },
+    IN: { net: 105000, gross: 1500000, age: 27, cash: 150000, investments: 400000, investing: 15000,
+      exp: { housing: 28000, groceries: 12000, utilities: 4000, transport: 6000, dining_out: 9000, shopping: 10000, family_support: 10000 },
+      debts: [{ name: "Bike loan", kind: "auto", balance: 60000, apr: 11.5, min_payment: 4500 }],
+      goals: [{ name: "Car", target: 800000, months: 30, saved: 100000 }] },
+  };
+  $("#example").onclick = () => {
+    let code = $("#country").value; if (!EXAMPLES[code]) { code = "US"; $("#country").value = "US"; onCountry(); }
+    const x = EXAMPLES[code];
+    $("#net").value = x.net; $("#gross").value = x.gross; $("#age").value = x.age; $("#cash").value = x.cash;
+    $("#investments").value = x.investments; $("#investing").value = x.investing; $("#pretax").value = x.pretax || 0;
+    $("#expenses").replaceChildren(); Object.entries(x.exp).forEach(([k, v]) => addExpense(k, v));
+    $("#debts").replaceChildren(); x.debts.forEach(addDebt);
+    $("#goals").replaceChildren(); x.goals.forEach(addGoal);
+  };
+
+  fetch("/api/countries").then((r) => r.json()).then((data) => {
+    countries = data;
+    for (const [code, c] of Object.entries(data)) $("#country").append(el("option", { value: code, text: c.name + (c.currency_code ? ` (${c.currency_code})` : "") }));
+    let saved = null; try { saved = localStorage.getItem("bluntfin.country"); } catch (e) {}
+    if (saved && data[saved]) $("#country").value = saved;
+    onCountry();
+  });
+  DEFAULT_EXPENSES.forEach((n) => addExpense(n, ""));
+})();
+</script>
+</body>
+</html>

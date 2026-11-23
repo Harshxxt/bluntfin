@@ -16,3 +16,6 @@ bluntfin = "bluntfin.cli:main"
 
 [tool.setuptools]
 packages = ["bluntfin"]
+
+[tool.setuptools.package-data]
+bluntfin = ["web/*.html"]
